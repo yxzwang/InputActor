@@ -413,7 +413,7 @@ class InputActorApp:
 
     @staticmethod
     def _default_input_path() -> str:
-        default = Path.cwd() / "20260218_232051" / "input.jsonl"
+        default = Path.cwd() / "example" / "input.jsonl"
         if default.exists():
             return str(default)
 

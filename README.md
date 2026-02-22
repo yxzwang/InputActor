@@ -32,6 +32,10 @@ The app expects a JSONL stream similar to:
 `session_header` and `stats` are metadata and are not replayed.
 For `mouse_move`, replay uses only `dx` and `dy` (relative movement).
 
+## Example Input
+
+`example/input.jsonl` is an example input sequence for testing playback.
+
 ## Requirements
 
 - Windows 10/11
