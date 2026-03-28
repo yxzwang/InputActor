@@ -4,6 +4,7 @@ import ctypes
 from ctypes import wintypes
 from typing import Any, Dict
 
+from .gamepad import GamepadManager
 from .models import SessionMeta
 
 INPUT_MOUSE = 0
@@ -94,6 +95,7 @@ get_system_metrics.restype = ctypes.c_int
 class WindowsInputSender:
     def __init__(self) -> None:
         self._meta = SessionMeta()
+        self._gamepad = GamepadManager()
         self._set_meta_from_system()
 
     def _set_meta_from_system(self) -> None:
@@ -113,6 +115,8 @@ class WindowsInputSender:
 
     def send_event(self, event: Dict[str, Any]) -> bool:
         event_type = str(event.get("type", "")).lower()
+        if event_type.startswith("gamepad_"):
+            return self._gamepad.send_event(event)
         if event_type == "mouse_move":
             self._send_mouse_move(
                 int(event.get("dx", 0) or 0),
@@ -148,6 +152,9 @@ class WindowsInputSender:
             self._send_mouse_wheel(event, horizontal=(event_type == "mouse_hwheel"))
             return True
         return False
+
+    def close(self) -> None:
+        self._gamepad.close()
 
     @staticmethod
     def _button_from_type(event_type: str) -> str:

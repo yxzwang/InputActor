@@ -37,6 +37,7 @@ python -m PyInstaller ^
   --clean ^
   --onefile ^
   --windowed ^
+  --collect-all vgamepad ^
   --name "InputActor" ^
   main.py
 if errorlevel 1 goto :error

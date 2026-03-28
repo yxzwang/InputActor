@@ -1,1 +1,1 @@
-# No third-party runtime dependencies are required.
+vgamepad>=0.1.0

@@ -189,6 +189,13 @@ class InputPlayer:
             else:
                 reason = "completed"
         finally:
+            try:
+                close_sender = getattr(self._sender, "close", None)
+                if callable(close_sender):
+                    close_sender()
+            except Exception:  # noqa: BLE001
+                pass
+
             with self._lock:
                 self._pause_gate.set()
                 if reason == "completed":
