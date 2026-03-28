@@ -106,10 +106,6 @@ class _VGamepadBackend:
                 pad.update()
             except Exception:  # noqa: BLE001
                 pass
-            try:
-                pad.__del__()
-            except Exception:  # noqa: BLE001
-                pass
         self._pads.clear()
         self._states.clear()
 
