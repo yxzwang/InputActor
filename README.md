@@ -44,7 +44,7 @@ For `mouse_move`, replay uses only `dx` and `dy` (relative movement).
 
 - Windows 10/11
 - Python 3.10+
-- For gamepad replay: ViGEmBus driver installed (required by `vgamepad`)
+- For source build: internet access to fetch latest ViGEmBus installer during packaging
 
 Install dependencies:
 
@@ -72,6 +72,9 @@ After success, the executable is:
 dist\InputActor.exe
 ```
 
+The build process embeds the latest ViGEmBus installer into the EXE.
+When gamepad replay is first needed on an end-user machine, InputActor will request admin permission and install ViGEmBus automatically.
+
 If `InputActor.exe` is running, close it before building.
 
 ## Notes
@@ -79,3 +82,4 @@ If `InputActor.exe` is running, close it before building.
 - Global hotkeys use Windows native `RegisterHotKey`.
 - Avoid using control hotkeys that may appear inside your recorded sequence.
 - Gamepad replay uses a virtual Xbox 360 gamepad through `vgamepad`.
+- If ViGEmBus is missing at runtime, InputActor attempts silent installation from bundled `ViGEmBusSetup.exe`.

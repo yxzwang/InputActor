@@ -8,6 +8,8 @@ __pycache__/
 build/
 dist/
 *.spec
+vendor/ViGEmBusSetup.exe
+vendor/ViGEmBusSetup.json
 
 # Virtual environments
 .venv/

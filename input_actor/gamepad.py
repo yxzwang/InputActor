@@ -3,6 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Dict, Optional
 
+from .vigembus import ensure_vigembus_installed
+
 MAX_XINPUT_GAMEPAD_INDEX = 3
 
 
@@ -37,6 +39,9 @@ class GamepadManager:
         self._backend.close()
         self._backend = None
 
+    def ensure_ready(self) -> None:
+        self._ensure_backend().ensure_driver()
+
     def _ensure_backend(self) -> "_VGamepadBackend":
         if self._backend is None:
             self._backend = _VGamepadBackend()
@@ -57,6 +62,17 @@ class _VGamepadBackend:
         self._pads: Dict[int, Any] = {}
         self._states: Dict[int, _PadState] = {}
         self._button_map = self._build_button_map()
+        self._driver_ready = False
+
+    def ensure_driver(self) -> None:
+        if self._driver_ready:
+            return
+        ok, message = ensure_vigembus_installed()
+        if not ok:
+            raise GamepadUnavailableError(
+                f"Gamepad replay requires ViGEmBus driver. {message}"
+            )
+        self._driver_ready = True
 
     def handle_event(self, event: Dict[str, Any]) -> None:
         event_type = str(event.get("type", "")).lower()
@@ -144,11 +160,20 @@ class _VGamepadBackend:
         for candidate in range(idx + 1):
             if candidate in self._pads:
                 continue
-            self._pads[candidate] = self._vg.VX360Gamepad()
+            self._pads[candidate] = self._create_virtual_pad()
             self._states[candidate] = _PadState()
         pad = self._pads[idx]
         state = self._states[idx]
         return pad, state
+
+    def _create_virtual_pad(self) -> Any:
+        self.ensure_driver()
+        try:
+            return self._vg.VX360Gamepad()
+        except Exception as exc:  # noqa: BLE001
+            raise GamepadUnavailableError(
+                "ViGEmBus is present, but virtual gamepad creation failed."
+            ) from exc
 
     @staticmethod
     def _normalize_pad_index(raw: Any) -> int:

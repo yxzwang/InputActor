@@ -121,6 +121,15 @@ class InputPlayer:
                 raise RuntimeError("No input sequence loaded.")
             if self._worker and self._worker.is_alive():
                 return False
+            events_for_prepare = list(self._events)
+
+        prepare_sender = getattr(self._sender, "prepare", None)
+        if callable(prepare_sender):
+            prepare_sender(events_for_prepare)
+
+        with self._lock:
+            if self._worker and self._worker.is_alive():
+                return False
 
             self._stop_event.clear()
             self._pause_gate.set()

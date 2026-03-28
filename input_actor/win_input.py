@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import ctypes
 from ctypes import wintypes
-from typing import Any, Dict
+from typing import Any, Dict, Iterable
 
 from .gamepad import GamepadManager
 from .models import SessionMeta
@@ -155,6 +155,13 @@ class WindowsInputSender:
 
     def close(self) -> None:
         self._gamepad.close()
+
+    def prepare(self, events: Iterable[Dict[str, Any]]) -> None:
+        for event in events:
+            event_type = str(event.get("type", "")).lower()
+            if event_type.startswith("gamepad_"):
+                self._gamepad.ensure_ready()
+                break
 
     @staticmethod
     def _button_from_type(event_type: str) -> str:
