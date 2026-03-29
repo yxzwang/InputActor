@@ -58,6 +58,22 @@ python -m pip install -r requirements.txt
 python main.py
 ```
 
+## C++ Version
+
+A C++ rewrite is available under `cpp_actor/` while preserving the original Python code for comparison.
+
+Build the C++ app from repo root:
+
+```powershell
+.\build_cpp.bat
+```
+
+Output:
+
+```text
+build-cpp\Release\InputActorCpp.exe
+```
+
 ## One-Click EXE Build
 
 Double-click `build_exe.bat` in the project root, or run:
