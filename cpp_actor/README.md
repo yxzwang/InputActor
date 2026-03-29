@@ -39,10 +39,12 @@ Output executable:
 build-cpp\Release\InputActorCpp.exe
 ```
 
-`build_cpp.bat` also copies `ViGEmClient.dll` to the same folder (if found from local vgamepad install).
+`build_cpp.bat` embeds both `ViGEmClient.dll` and `ViGEmBusSetup.exe` into `InputActorCpp.exe`.
+It also copies `ViGEmClient.dll` beside the EXE as an optional fallback.
 
 ## Notes
 
 - Gamepad replay requires ViGEmBus and `ViGEmClient.dll`.
 - If missing, the app attempts elevation and runs bundled `vendor\ViGEmBusSetup.exe` silently.
-- For distribution, keep `InputActorCpp.exe` and `ViGEmClient.dll` in the same directory.
+- Preferred distribution is single file: `InputActorCpp.exe`.
+- Keeping `ViGEmClient.dll` beside EXE is optional fallback.

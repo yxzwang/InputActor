@@ -26,6 +26,7 @@
 #include <vector>
 
 #include <nlohmann/json.hpp>
+#include "resources.h"
 
 using json = nlohmann::json;
 namespace fs = std::filesystem;
@@ -114,6 +115,98 @@ std::wstring TimeStamp() {
     wchar_t buf[64]{};
     StringCchPrintfW(buf, 64, L"[%02u:%02u:%02u] ", st.wHour, st.wMinute, st.wSecond);
     return buf;
+}
+
+fs::path EmbeddedWorkDir() {
+    wchar_t local_app_data[MAX_PATH]{};
+    DWORD len = GetEnvironmentVariableW(L"LOCALAPPDATA", local_app_data, MAX_PATH);
+    fs::path base;
+    if (len > 0 && len < MAX_PATH) {
+        base = fs::path(local_app_data);
+    } else {
+        wchar_t temp[MAX_PATH]{};
+        GetTempPathW(MAX_PATH, temp);
+        base = fs::path(temp);
+    }
+    return base / L"InputActorCpp" / L"embedded";
+}
+
+bool ExtractEmbeddedResourceToFile(int resource_id, const fs::path& out_path, std::wstring& error) {
+    HMODULE module = GetModuleHandleW(nullptr);
+    if (module == nullptr) {
+        error = L"GetModuleHandle failed: " + FormatError(GetLastError());
+        return false;
+    }
+
+    HRSRC resource = FindResourceW(module, MAKEINTRESOURCEW(resource_id), RT_RCDATA);
+    if (resource == nullptr) {
+        error = L"Embedded resource not found: id=" + std::to_wstring(resource_id);
+        return false;
+    }
+
+    DWORD size = SizeofResource(module, resource);
+    HGLOBAL loaded = LoadResource(module, resource);
+    if (loaded == nullptr || size == 0) {
+        error = L"Failed to load embedded resource id=" + std::to_wstring(resource_id);
+        return false;
+    }
+
+    const void* data = LockResource(loaded);
+    if (data == nullptr) {
+        error = L"Failed to lock embedded resource id=" + std::to_wstring(resource_id);
+        return false;
+    }
+
+    std::error_code ec;
+    fs::create_directories(out_path.parent_path(), ec);
+    if (ec) {
+        error = L"Failed to create directory: " + out_path.parent_path().wstring();
+        return false;
+    }
+
+    // Skip rewrite when size matches to reduce churn and file locking risk.
+    if (fs::exists(out_path, ec) && !ec) {
+        uintmax_t existing_size = fs::file_size(out_path, ec);
+        if (!ec && existing_size == size) {
+            return true;
+        }
+    }
+
+    fs::path temp_path = out_path;
+    temp_path += L".tmp";
+    {
+        std::ofstream out(temp_path, std::ios::binary | std::ios::trunc);
+        if (!out) {
+            error = L"Failed to open temp file for writing: " + temp_path.wstring();
+            return false;
+        }
+        out.write(static_cast<const char*>(data), static_cast<std::streamsize>(size));
+        if (!out.good()) {
+            error = L"Failed to write embedded resource to: " + temp_path.wstring();
+            return false;
+        }
+    }
+
+    fs::rename(temp_path, out_path, ec);
+    if (ec) {
+        fs::remove(out_path, ec);
+        ec.clear();
+        fs::rename(temp_path, out_path, ec);
+    }
+
+    if (ec) {
+        error = L"Failed to finalize extracted file: " + out_path.wstring();
+        return false;
+    }
+    return true;
+}
+
+std::optional<fs::path> ExtractEmbeddedResource(int resource_id, const std::wstring& filename, std::wstring& error) {
+    const fs::path out = EmbeddedWorkDir() / filename;
+    if (!ExtractEmbeddedResourceToFile(resource_id, out, error)) {
+        return std::nullopt;
+    }
+    return out;
 }
 
 std::string LowerCopy(std::string text) {
@@ -498,7 +591,12 @@ private:
         return false;
     }
 
-    static std::optional<fs::path> FindInstaller() {
+    static std::optional<fs::path> FindInstaller(std::wstring& error) {
+        std::wstring extract_error;
+        if (auto extracted = ExtractEmbeddedResource(IDR_VIGEMBUS_SETUP, L"ViGEmBusSetup.exe", extract_error); extracted.has_value()) {
+            return extracted;
+        }
+
         wchar_t exe_path[MAX_PATH]{};
         if (GetModuleFileNameW(nullptr, exe_path, MAX_PATH) > 0) {
             fs::path candidate = fs::path(exe_path).parent_path() / L"vendor" / L"ViGEmBusSetup.exe";
@@ -510,6 +608,7 @@ private:
         if (fs::exists(cwd_candidate)) {
             return cwd_candidate;
         }
+        error = L"ViGEmBus installer is missing. Embedded extract error: " + extract_error;
         return std::nullopt;
     }
 
@@ -517,9 +616,11 @@ private:
         if (DriverInstalled()) {
             return true;
         }
-        auto installer = FindInstaller();
+        auto installer = FindInstaller(error);
         if (!installer.has_value()) {
-            error = L"ViGEmBus is not installed and bundled installer was not found.";
+            if (error.empty()) {
+                error = L"ViGEmBus is not installed and installer was not found.";
+            }
             return false;
         }
 
@@ -575,6 +676,11 @@ private:
         }
 
         std::vector<fs::path> candidates;
+        std::wstring extract_error;
+        if (auto extracted = ExtractEmbeddedResource(IDR_VIGEMCLIENT_DLL, L"ViGEmClient.dll", extract_error); extracted.has_value()) {
+            candidates.push_back(*extracted);
+        }
+
         candidates.emplace_back(L"ViGEmClient.dll");
 
         wchar_t exe_path[MAX_PATH]{};
@@ -603,8 +709,7 @@ private:
             }
         }
 
-        error = L"Unable to load ViGEmClient.dll. Please place it next to InputActorCpp.exe "
-                L"or ensure build_cpp.bat copied it correctly.";
+        error = L"Unable to load ViGEmClient.dll. Embedded extract error: " + extract_error;
         return false;
     }
 

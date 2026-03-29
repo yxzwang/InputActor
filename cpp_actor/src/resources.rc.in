@@ -1,0 +1,6 @@
+#include <windows.h>
+#include "resources.h"
+
+IDR_VIGEMCLIENT_DLL RCDATA "@VIGEMCLIENT_DLL_PATH_RC@"
+IDR_VIGEMBUS_SETUP RCDATA "@VIGEMBUS_SETUP_PATH_RC@"
+
