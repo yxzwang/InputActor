@@ -51,6 +51,7 @@ constexpr int IDC_EVENT_TYPE = 1010;
 constexpr int IDC_STATUS = 1011;
 constexpr int IDC_STATE = 1012;
 constexpr int IDC_LOG = 1013;
+constexpr int IDC_GAMEPAD_SLOT = 1014;
 
 constexpr int HOTKEY_ID_START = 1;
 constexpr int HOTKEY_ID_PAUSE = 2;
@@ -475,6 +476,7 @@ public:
             std::string control = LowerCopy(event.data.value("control", std::string{}));
             std::replace(control.begin(), control.end(), '-', '_');
             std::replace(control.begin(), control.end(), ' ', '_');
+            std::replace(control.begin(), control.end(), '.', '_');
 
             const std::unordered_map<std::string, std::string> aliases{
                 {"lb", "left_shoulder"},
@@ -528,12 +530,37 @@ public:
             std::string control = LowerCopy(event.data.value("control", std::string{}));
             std::replace(control.begin(), control.end(), '-', '_');
             std::replace(control.begin(), control.end(), ' ', '_');
+            std::replace(control.begin(), control.end(), '.', '_');
 
             const std::unordered_map<std::string, std::string> aliases{
                 {"lt", "left_trigger"},
                 {"rt", "right_trigger"},
                 {"l2", "left_trigger"},
                 {"r2", "right_trigger"},
+                {"left_x", "left_stick_x"},
+                {"left_y", "left_stick_y"},
+                {"right_x", "right_stick_x"},
+                {"right_y", "right_stick_y"},
+                {"lx_axis", "left_stick_x"},
+                {"ly_axis", "left_stick_y"},
+                {"rx_axis", "right_stick_x"},
+                {"ry_axis", "right_stick_y"},
+                {"left_thumb_x", "left_stick_x"},
+                {"left_thumb_y", "left_stick_y"},
+                {"right_thumb_x", "right_stick_x"},
+                {"right_thumb_y", "right_stick_y"},
+                {"left_thumbstick_x", "left_stick_x"},
+                {"left_thumbstick_y", "left_stick_y"},
+                {"right_thumbstick_x", "right_stick_x"},
+                {"right_thumbstick_y", "right_stick_y"},
+                {"lstick_x", "left_stick_x"},
+                {"lstick_y", "left_stick_y"},
+                {"rstick_x", "right_stick_x"},
+                {"rstick_y", "right_stick_y"},
+                {"leftstick_x", "left_stick_x"},
+                {"leftstick_y", "left_stick_y"},
+                {"rightstick_x", "right_stick_x"},
+                {"rightstick_y", "right_stick_y"},
             };
             if (auto it = aliases.find(control); it != aliases.end()) {
                 control = it->second;
@@ -541,13 +568,13 @@ public:
 
             const double value = GetDouble(event.data.value("value", 0), 0);
             if (control == "left_stick_x") {
-                report.sThumbLX = static_cast<int16_t>(std::clamp(static_cast<int>(value), -32768, 32767));
+                report.sThumbLX = ClampStick(value);
             } else if (control == "left_stick_y") {
-                report.sThumbLY = static_cast<int16_t>(std::clamp(static_cast<int>(value), -32768, 32767));
+                report.sThumbLY = ClampStick(value);
             } else if (control == "right_stick_x") {
-                report.sThumbRX = static_cast<int16_t>(std::clamp(static_cast<int>(value), -32768, 32767));
+                report.sThumbRX = ClampStick(value);
             } else if (control == "right_stick_y") {
-                report.sThumbRY = static_cast<int16_t>(std::clamp(static_cast<int>(value), -32768, 32767));
+                report.sThumbRY = ClampStick(value);
             } else if (control == "left_trigger") {
                 report.bLeftTrigger = ClampTrigger(value);
             } else if (control == "right_trigger") {
@@ -781,12 +808,25 @@ private:
         int v = static_cast<int>(std::round(value));
         return static_cast<uint8_t>(std::clamp(v, 0, 255));
     }
+
+    static int16_t ClampStick(double value) {
+        if (value >= -1.0 && value <= 1.0) {
+            value *= 32767.0;
+        }
+        int v = static_cast<int>(std::round(value));
+        return static_cast<int16_t>(std::clamp(v, -32768, 32767));
+    }
 };
 
 class WindowsInputSender {
 public:
     void Configure(const SessionMeta& meta) {
         meta_ = meta;
+    }
+
+    void SetGamepadMirrorSlot(std::optional<int> slot) {
+        gamepad_mirror_slot_ = slot;
+        gamepad_.Reset();
     }
 
     void Prepare(const std::vector<ReplayEvent>& events) {
@@ -803,8 +843,16 @@ public:
 
     bool Send(const ReplayEvent& event) {
         if (event.type.rfind("gamepad_", 0) == 0) {
+            const ReplayEvent* replay_event = &event;
+            ReplayEvent remapped_event{};
+            if (gamepad_mirror_slot_.has_value()) {
+                remapped_event = event;
+                remapped_event.data["gamepad_index"] = *gamepad_mirror_slot_;
+                replay_event = &remapped_event;
+            }
+
             std::wstring error;
-            if (!gamepad_.Send(event, error)) {
+            if (!gamepad_.Send(*replay_event, error)) {
                 throw std::runtime_error(Utf8FromWide(error));
             }
             return true;
@@ -855,6 +903,7 @@ public:
 private:
     SessionMeta meta_{};
     VigemRuntime gamepad_{};
+    std::optional<int> gamepad_mirror_slot_;
 
     static bool SendInputOnce(INPUT& input) {
         UINT sent = SendInput(1, &input, sizeof(INPUT));
@@ -1050,6 +1099,14 @@ public:
         worker_ = std::thread([this]() { Run(); });
         on_status_(L"Playback started.");
         return true;
+    }
+
+    void SetGamepadMirrorSlot(std::optional<int> slot) {
+        std::lock_guard<std::mutex> guard(lock_);
+        if (state_ == State::Running || state_ == State::Paused || state_ == State::Stopping) {
+            throw std::runtime_error("Cannot change gamepad slot while playback is running.");
+        }
+        sender_.SetGamepadMirrorSlot(slot);
     }
 
     bool TogglePause() {
@@ -1325,6 +1382,7 @@ private:
     HWND event_type_static_ = nullptr;
     HWND status_static_ = nullptr;
     HWND state_static_ = nullptr;
+    HWND gamepad_slot_combo_ = nullptr;
     HWND log_edit_ = nullptr;
     std::wstring loaded_path_key_;
 
@@ -1359,7 +1417,7 @@ private:
                 RefreshButtons();
                 return 0;
             case WM_COMMAND:
-                HandleCommand(LOWORD(wp));
+                HandleCommand(LOWORD(wp), HIWORD(wp));
                 return 0;
             case WM_HOTKEY:
                 if (wp == HOTKEY_ID_START) {
@@ -1411,6 +1469,16 @@ private:
         delay_edit_ = CreateCtrl(L"EDIT", L"3", WS_BORDER | WS_CHILD | WS_VISIBLE | ES_AUTOHSCROLL, 388, 78, 64, 24, IDC_DELAY);
         CreateStatic(L"State:", 470, 82, 44, 20);
         state_static_ = CreateCtrl(L"STATIC", L"idle", WS_CHILD | WS_VISIBLE, 514, 82, 160, 20, IDC_STATE);
+        CreateStatic(L"Gamepad Slot:", 680, 82, 90, 20);
+        gamepad_slot_combo_ = CreateCtrl(WC_COMBOBOXW, L"", WS_BORDER | WS_CHILD | WS_VISIBLE | WS_VSCROLL | CBS_DROPDOWNLIST,
+                                         774, 78, 82, 200, IDC_GAMEPAD_SLOT);
+        SendMessageW(gamepad_slot_combo_, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(L"Auto"));
+        SendMessageW(gamepad_slot_combo_, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(L"0"));
+        SendMessageW(gamepad_slot_combo_, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(L"1"));
+        SendMessageW(gamepad_slot_combo_, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(L"2"));
+        SendMessageW(gamepad_slot_combo_, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(L"3"));
+        SendMessageW(gamepad_slot_combo_, CB_SETCURSEL, 0, 0);
+        ApplyGamepadSlotSelection(false);
 
         CreateStatic(L"Hotkeys", 16, 114, 200, 20);
         CreateStatic(DEFAULT_START_HOTKEY, 16, 136, 180, 20);
@@ -1443,7 +1511,7 @@ private:
         SendMessageW(hwnd_ctrl, WM_SETFONT, reinterpret_cast<WPARAM>(font_), TRUE);
     }
 
-    void HandleCommand(int id) {
+    void HandleCommand(int id, int notify_code) {
         if (id == IDC_BROWSE) {
             BrowseFile();
         } else if (id == IDC_LOAD) {
@@ -1454,6 +1522,8 @@ private:
             TogglePause();
         } else if (id == IDC_STOP) {
             StopPlayback();
+        } else if (id == IDC_GAMEPAD_SLOT && notify_code == CBN_SELCHANGE) {
+            ApplyGamepadSlotSelection(true);
         }
     }
 
@@ -1550,6 +1620,10 @@ private:
         }
         if (state == InputPlayer::State::Running || state == InputPlayer::State::Stopping) {
             SetStatus(L"Playback is already running.");
+            return;
+        }
+
+        if (!ApplyGamepadSlotSelection(false)) {
             return;
         }
 
@@ -1661,6 +1735,7 @@ private:
             EnableWindow(start_button_, FALSE);
             EnableWindow(pause_button_, FALSE);
             EnableWindow(stop_button_, TRUE);
+            EnableWindow(gamepad_slot_combo_, FALSE);
             SetText(state_static_, L"countdown");
             SetText(pause_button_, L"Pause");
             return;
@@ -1677,7 +1752,44 @@ private:
         bool can_pause_stop = state == InputPlayer::State::Running || state == InputPlayer::State::Paused;
         EnableWindow(pause_button_, can_pause_stop ? TRUE : FALSE);
         EnableWindow(stop_button_, can_pause_stop ? TRUE : FALSE);
+        EnableWindow(gamepad_slot_combo_, can_start ? TRUE : FALSE);
         SetText(pause_button_, state == InputPlayer::State::Paused ? L"Resume" : L"Pause");
+    }
+
+    static std::optional<int> SlotFromComboSelection(int selection) {
+        if (selection <= 0) {
+            return std::nullopt;
+        }
+        return selection - 1;
+    }
+
+    bool ApplyGamepadSlotSelection(bool show_status) {
+        if (!gamepad_slot_combo_) {
+            return true;
+        }
+        int selection = static_cast<int>(SendMessageW(gamepad_slot_combo_, CB_GETCURSEL, 0, 0));
+        if (selection == CB_ERR) {
+            selection = 0;
+            SendMessageW(gamepad_slot_combo_, CB_SETCURSEL, selection, 0);
+        }
+        std::optional<int> forced_slot = SlotFromComboSelection(selection);
+        try {
+            player_.SetGamepadMirrorSlot(forced_slot);
+        } catch (const std::exception& ex) {
+            std::wstring msg = WideFromUtf8(ex.what());
+            SetStatus(L"Cannot apply gamepad slot: " + msg);
+            MessageBoxW(hwnd_, msg.c_str(), L"Gamepad slot", MB_ICONERROR | MB_OK);
+            return false;
+        }
+
+        if (show_status) {
+            if (forced_slot.has_value()) {
+                SetStatus(L"Gamepad slot forced to XInput #" + std::to_wstring(*forced_slot) + L".");
+            } else {
+                SetStatus(L"Gamepad slot set to Auto (use gamepad_index from jsonl).");
+            }
+        }
+        return true;
     }
 
     void RegisterHotkeys() {

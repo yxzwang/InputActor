@@ -12,6 +12,7 @@ The original Python implementation remains unchanged under `input_actor/` for fe
 - Desktop GUI (Win32)
 - Start/Pause/Stop controls
 - Start delay countdown
+- Gamepad slot selector in GUI (`Auto` / force `0..3`)
 - Runtime progress + log
 - Global hotkeys:
   - `Ctrl+Alt+F6` Start

@@ -43,6 +43,7 @@ class InputActorApp:
         self._countdown_end_monotonic = 0.0
         self._countdown_job: str | None = None
         self._countdown_last_second = -1
+        self._loaded_path_key = ""
 
         self.player = InputPlayer(
             sender=WindowsInputSender(),
@@ -180,12 +181,20 @@ class InputActorApp:
             self._refresh_buttons()
             return False
 
+        self._loaded_path_key = self._normalize_path_key(path)
         self._set_status(f"Loaded: {path}")
         self._refresh_buttons()
         return True
 
     def start_playback(self) -> None:
-        if self.player.total_events == 0 and not self.load_sequence(show_dialog=True):
+        current_path = self.path_var.get().strip()
+        current_path_key = self._normalize_path_key(current_path)
+        need_reload = (
+            self.player.total_events == 0
+            or not current_path_key
+            or current_path_key != self._loaded_path_key
+        )
+        if need_reload and not self.load_sequence(show_dialog=True):
             return
         if self._countdown_active:
             self._set_status("Countdown is already running.")
@@ -420,6 +429,16 @@ class InputActorApp:
         for candidate in Path.cwd().rglob("*.jsonl"):
             return str(candidate)
         return ""
+
+    @staticmethod
+    def _normalize_path_key(path_text: str) -> str:
+        text = path_text.strip()
+        if not text:
+            return ""
+        try:
+            return str(Path(text).expanduser().resolve()).lower()
+        except Exception:  # noqa: BLE001
+            return str(Path(text)).lower()
 
 
 def run_app() -> None:

@@ -189,9 +189,15 @@ class _VGamepadBackend:
     @staticmethod
     def _clamp_stick_value(raw: Any) -> int:
         try:
-            value = int(round(float(raw)))
+            as_float = float(raw)
         except Exception:  # noqa: BLE001
-            value = 0
+            as_float = 0.0
+
+        # Accept normalized stick values from some recorders.
+        if -1.0 <= as_float <= 1.0:
+            as_float = as_float * 32767.0
+
+        value = int(round(as_float))
         return max(min(value, 32767), -32768)
 
     @staticmethod
@@ -233,6 +239,30 @@ class _VGamepadBackend:
             "rt": "right_trigger",
             "l2": "left_trigger",
             "r2": "right_trigger",
+            "left_x": "left_stick_x",
+            "left_y": "left_stick_y",
+            "right_x": "right_stick_x",
+            "right_y": "right_stick_y",
+            "lx_axis": "left_stick_x",
+            "ly_axis": "left_stick_y",
+            "rx_axis": "right_stick_x",
+            "ry_axis": "right_stick_y",
+            "left_thumb_x": "left_stick_x",
+            "left_thumb_y": "left_stick_y",
+            "right_thumb_x": "right_stick_x",
+            "right_thumb_y": "right_stick_y",
+            "left_thumbstick_x": "left_stick_x",
+            "left_thumbstick_y": "left_stick_y",
+            "right_thumbstick_x": "right_stick_x",
+            "right_thumbstick_y": "right_stick_y",
+            "lstick_x": "left_stick_x",
+            "lstick_y": "left_stick_y",
+            "rstick_x": "right_stick_x",
+            "rstick_y": "right_stick_y",
+            "leftstick_x": "left_stick_x",
+            "leftstick_y": "left_stick_y",
+            "rightstick_x": "right_stick_x",
+            "rightstick_y": "right_stick_y",
         }
         return aliases.get(normalized, normalized)
 
